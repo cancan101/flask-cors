@@ -12,8 +12,7 @@
 import collections
 from datetime import timedelta
 import re
-from functools import update_wrapper
-
+from functools import update_wrapper, wraps
 from flask import make_response, request, current_app
 from six import string_types
 
@@ -201,6 +200,11 @@ class CORS(object):
             expression for which the app-wide configured options are applied.
             :type resources: dict, iterable or string
 
+            :param intercept_exceptions: Whether or not to patch Flask's
+            exception handler to return CORS headers in error handlers.
+
+            :type intercept_exceptions: bool
+
         '''
 
         if app is not None:
@@ -212,9 +216,9 @@ class CORS(object):
         options.update(_get_app_kwarg_dict(app))
         options.update(kwargs)
 
-        _kwarg_resources = kwargs.get('resources')
-        _app_resources = app.config.get('CORS_RESOURCES')
-        _resources = _kwarg_resources or _app_resources or [r'/*']
+        _resources = _get_option('resources', kwargs, app, default=[r'/*'])
+        _intercept_exceptions = _get_option('intercept_exceptions', kwargs, app,
+                                            default=True)
 
         if isinstance(_resources, dict):  # sort the regexps by length
             resources = sorted(_resources.items(),
@@ -247,6 +251,21 @@ class CORS(object):
             return resp
 
         app.after_request(cors_after_request)
+
+        # Wrap exception handlers with cross_origin
+        # These error handlers will still respect the behavior of the route
+        if _intercept_exceptions:
+            def _after_request_decorator(f):
+                @wraps(f)
+                def wrapper(*args, **kwds):
+                    return cors_after_request(app.make_response(
+                        f(*args, **kwds)))
+                return wrapper
+
+            app.handle_exception = _after_request_decorator(
+                app.handle_exception)
+            app.handle_user_exception = _after_request_decorator(
+                app.handle_user_exception)
 
 
 def _set_cors_headers(resp, options):
@@ -319,6 +338,18 @@ def _set_cors_headers(resp, options):
     if resp.headers[ACL_ORIGIN] != '*' and options.get('vary_header'):
         vary = ['Origin', resp.headers.get('Vary', None)]
         resp.headers['Vary'] = ', '. join(v for v in vary if v is not None)
+
+
+def _get_option(option_name, kwargs, app, default=None):
+    kwargs_var = kwargs.get(option_name)
+    app_config_var = app.config.get(("cors_%s" % option_name).upper())
+
+    if kwargs_var is not None:
+        return kwargs_var
+    if app_config_var is not None:
+        return app_config_var
+    else:
+        return default
 
 
 def _get_app_kwarg_dict(app=current_app):
