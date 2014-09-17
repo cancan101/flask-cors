@@ -15,6 +15,7 @@ import re
 from functools import update_wrapper, wraps
 from flask import make_response, request, current_app
 from six import string_types
+from werkzeug.exceptions import InternalServerError
 
 
 # Common string constants
@@ -258,14 +259,35 @@ class CORS(object):
             def _after_request_decorator(f):
                 @wraps(f)
                 def wrapper(*args, **kwds):
-                    return cors_after_request(app.make_response(
-                        f(*args, **kwds)))
+                    return cors_after_request(
+                        app.make_response(f(*args, **kwds))
+                    )
                 return wrapper
 
-            app.handle_exception = _after_request_decorator(
-                app.handle_exception)
-            app.handle_user_exception = _after_request_decorator(
-                app.handle_user_exception)
+            def _monkey_patch_handlers():
+                '''
+                    This function checks if there are any error handlers
+                    configueed for this application. If there are any,
+                    they are modified to have cors_after_request called after
+                    their invocation.
+
+                    If there are none, a basic, default handler is inserted
+                    which duplicates Flask's default error handler and simply
+                    wraps the result with cors_after_request.
+                '''
+                if app.error_handler_spec[None].get(500) is None:
+                    @app.errorhandler(500)
+                    @_after_request_decorator
+                    def _default_error_handler(e):
+                        return InternalServerError()
+                else:
+                    for bp, err_to_f in app.error_handler_spec.items():
+                        for err, handler in err_to_f.items():
+                            print err, handler
+                            wrapped_handler = _after_request_decorator(handler)
+                            app.error_handler_spec[bp][err] = wrapped_handler
+
+            app.before_first_request(_monkey_patch_handlers)
 
 
 def _set_cors_headers(resp, options):
