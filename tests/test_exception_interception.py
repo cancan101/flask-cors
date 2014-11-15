@@ -206,5 +206,65 @@ class NoExceptionInterceptionTestCase(ExceptionInterceptionDefaultTestCase):
         self.assertEqual(resp.status_code, 500)
         self.assertFalse(ACL_ORIGIN in resp.headers)
 
+class NoExceptionInterceptionAppConfigTestCase(NoExceptionInterceptionTestCase):
+    def __init__(self, *args, **kwargs):
+        super(NoExceptionInterceptionAppConfigTestCase, self).__init__(*args, **kwargs)
+
+    def setUp(self):
+        self.app = Flask(__name__)
+        self.app.config['CORS_INTERCEPT_EXCEPTIONS'] = False
+        CORS(self.app,
+             resources={
+                 r'/test_acl*': {},
+             })
+        add_routes(self.app)
+
+    def test_acl_exception_with_error_handler(self):
+        '''
+            If a 500 handler is setup by the user, responses should have
+            CORS matching rules applied, regardless of whether or not
+            intercept_exceptions is enbaled.
+        '''
+        return_string = "Simple error handler"
+
+        @self.app.errorhandler(404)
+        @self.app.errorhandler(500)
+        def catch_all_handler(error):
+            '''
+                This error handler catches 404s and 500s and returns
+                status 200 no matter what. It is not a good handler.
+            '''
+            return return_string, 200
+
+        acl_paths = [
+            '/test_acl_abort_404',
+            '/test_acl_abort_500',
+        ]
+        no_acl_paths = [
+            '/test_no_acl_abort_404',
+            '/test_no_acl_abort_500',
+            'test_no_acl_uncaught_exception_500'
+            'test_acl_uncaught_exception_500'
+        ]
+
+        for resp in map(self.get, acl_paths):
+            self.assertEqual(resp.status_code, 200)
+            self.assertTrue(ACL_ORIGIN in resp.headers)
+
+        for resp in map(self.get, no_acl_paths):
+            self.assertEqual(resp.status_code, 200)
+            self.assertFalse(ACL_ORIGIN in resp.headers)
+
+    def test_acl_uncaught_exception_500(self):
+        '''
+            Uncaught exceptions will trigger Flask's internal exception
+            handler, and should have ACL headers only if intercept_exceptions
+            is set to True. In this case it is not.
+        '''
+        resp = self.get('/test_acl_uncaught_exception_500')
+        self.assertEqual(resp.status_code, 500)
+        self.assertFalse(ACL_ORIGIN in resp.headers)
+
+
 if __name__ == "__main__":
     unittest.main()

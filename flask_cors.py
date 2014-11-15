@@ -31,7 +31,7 @@ ALL_METHODS = ['GET', 'HEAD', 'POST', 'OPTIONS', 'PUT', 'PATCH', 'DELETE']
 CONFIG_OPTIONS = ['CORS_ORIGINS', 'CORS_METHODS', 'CORS_HEADERS',
                   'CORS_EXPOSE_HEADERS', 'CORS_SUPPORTS_CREDENTIALS',
                   'CORS_MAX_AGE', 'CORS_SEND_WILDCARD', 'CORS_ALWAYS_SEND',
-                  'CORS_AUTOMATIC_OPTIONS', 'CORS_VARY_HEADER']
+                  'CORS_AUTOMATIC_OPTIONS', 'CORS_VARY_HEADER', 'CORS_INTERCEPT_EXCEPTIONS']
 
 FLASK_CORS_EVALUATED = '_FLASK_CORS_EVALUATED'
 
@@ -205,6 +205,16 @@ class CORS(object):
         Default :'*'
 
         :type resources: dict, iterable or string
+
+        :param intercept_exceptions: enable return of CORS headers when
+        exceptions occur.
+
+        Note: in debug mode, the exception is returned to users, and CORS
+        headers are not applied.
+
+        Default :True
+
+        :type intercept_exceptions: bool
 
     '''
 
