@@ -433,6 +433,9 @@ def _set_cors_headers(resp, options):
     for k, v in headers_to_set.items():
         resp.headers[k] = v
 
+    if ACL_REQUEST_HEADERS in request.headers:
+        resp.headers[ACL_ALLOW_HEADERS] = request.headers.get(ACL_REQUEST_HEADERS)
+
     return resp
 
 
